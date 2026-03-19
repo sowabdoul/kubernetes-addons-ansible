@@ -1,0 +1,38 @@
+---
+- name: Install Rancher
+  kubernetes.core.helm:
+    kubeconfig: /etc/kubernetes/admin.conf
+    chart_ref: rancher
+    chart_repo_url: https://releases.rancher.com/server-charts/stable
+    chart_version: "2.13.0"
+    create_namespace: true
+    release_name: rancher
+    release_namespace: cattle-system
+    release_state: present
+    release_values:
+      hostname: "{{ rancher_ui_domain }}"
+      bootstrapPassword: "{{ rancher_ui_admin_password }}"
+      replicas: "{{ rancher_replica_ui | default(3) }}"
+      tolerations:
+        - operator: Exists
+      auditLog:
+        enabled: true
+        level: 1
+        destination: hostPath
+        hostPath: /var/log/rancher/audit/
+        maxAge: 5
+        maxBackup: 20
+        maxSize: 100
+      service:
+        type: NodePort
+      ingress:
+        enabled: false
+        ingressClassName: "{{ kubernetes_ingress_class | default('nginx') }}"
+        pathType: Prefix
+        path: /
+        extraAnnotations:
+          cert-manager.io/cluster-issuer: "{{ cert_manager_cluster_issuer | default('letsencrypt') }}"
+          # nginx.ingress.kubernetes.io/proxy-body-size: "0"
+        tls:
+          source: secret
+          secretName: "{{ rancher_ui_domain }}-tls"

@@ -1,0 +1,31 @@
+---
+- name: Install Openstack Cloud Controller Manager Helm Chart
+  kubernetes.core.helm:
+    kubeconfig: /etc/kubernetes/admin.conf
+    chart_ref: openstack-cloud-controller-manager
+    chart_repo_url: https://kubernetes.github.io/cloud-provider-openstack/
+    chart_version: "2.31.1"
+    create_namespace: true
+    release_name: openstack-cloud-controller
+    release_namespace: openstack-cloud-controller
+    release_state: present
+    release_values:
+      fullnameOverride: openstack-cloud-controller
+      secret:
+        enabled: true
+        create: true
+        name: openstack-cloud-controller-cloud-config
+      cloudConfig:
+        global:
+          region: "{{ openstack_auth_region }}"
+          auth-url: "{{ openstack_auth_url }}"
+          os-endpoint-type: "{{ openstack_endpoint_type | default('public') }}"
+          application-credential-id: "{{ openstack_application_credential_id }}"
+          application-credential-secret: "{{ openstack_application_credential_secret }}"
+        loadBalancer:
+          floating-network-id: "{{ openstack_floating_network_id }}"
+          floating-subnet-id: "{{ openstack_floating_subnet_id }}"
+          subnet-id: "{{ openstack_subnet_id }}"
+      cluster:
+        name: "{{ kubernetes_cluster_name }}"
+      clusterRoleName: kube-system:cloud-controller-manager

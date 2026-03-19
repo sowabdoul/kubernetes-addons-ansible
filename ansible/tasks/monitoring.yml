@@ -1,0 +1,731 @@
+---
+- name: Create monitoring namespace
+  kubernetes.core.k8s:
+    kubeconfig: /etc/kubernetes/admin.conf
+    name: monitoring
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Install Kube Prometheus Stack
+  kubernetes.core.helm:
+    kubeconfig: /etc/kubernetes/admin.conf
+    chart_ref: kube-prometheus-stack
+    chart_repo_url: https://prometheus-community.github.io/helm-charts
+    chart_version: "81.6.9"
+    create_namespace: false
+    release_name: kube-prometheus-stack
+    release_namespace: monitoring
+    release_state: present
+    release_values:
+      alertmanager:
+        enabled: true
+        config:
+          global:
+            resolve_timeout: 5m
+            smtp_smarthost: "{{ alertmanager_smtp_host }}"
+            smtp_from: "{{ alertmanager_smtp_from }}"
+            smtp_auth_username: "{{ alertmanager_smtp_username }}"
+            smtp_auth_password: "{{ alertmanager_smtp_password }}"
+            smtp_require_tls: "{{ alertmanager_smtp_require_tls | default(false) | bool }}"
+          inhibit_rules:
+            - source_matchers:
+                - "severity = critical"
+              target_matchers:
+                - "severity =~ warning|info"
+              equal:
+                - "namespace"
+                - "alertname"
+            - source_matchers:
+                - "severity = warning"
+              target_matchers:
+                - "severity = info"
+              equal:
+                - "namespace"
+                - "alertname"
+          route:
+            group_by: ["namespace", "alertname", "severity"]
+            group_wait: 30s
+            group_interval: 5m
+            repeat_interval: 12h
+            receiver: "email"
+            routes:
+              - receiver: "null"
+                matchers:
+                  - alertname = "Watchdog"
+              - receiver: "null"
+                matchers:
+                  - alertname = "InfoInhibitor"
+          receivers:
+            - name: "null"
+            - name: "email"
+              email_configs:
+                - to: "{{ alert_receiver_mail }}"
+                  send_resolved: true
+          templates:
+            - "/etc/alertmanager/config/*.tmpl"
+        alertmanagerSpec:
+          storage:
+            volumeClaimTemplate:
+              spec:
+                storageClassName: "{{ kubernetes_storage_class | default('longhorn') }}"
+                accessModes:
+                  - ReadWriteOnce
+                resources:
+                  requests:
+                    storage: 2Gi
+      grafana:
+        enabled: true
+        adminPassword: "{{ grafana_ui_admin_password }}"
+        defaultDashboardsEnabled: true
+        defaultDashboardsTimezone: utc
+        persistence:
+          enabled: true
+          type: sts
+          storageClassName: "{{ kubernetes_storage_class | default('longhorn') }}"
+          accessModes:
+            - ReadWriteOnce
+          size: "{{ grafana_storage | default('10Gi') }}"
+          finalizers:
+            - kubernetes.io/pvc-protection
+        plugins:
+          - grafana-pyroscope-app
+        # grafana.ini:
+        #   unified_alerting:
+        #     enabled: false
+        #   alerting:
+        #     enabled: false
+        datasources:
+          datasources.yaml:
+            apiVersion: 1
+            datasources:
+              - name: Prometheus
+                type: prometheus
+                uid: prometheus
+                access: proxy
+                orgId: 1
+                url: "http://kube-prometheus-stack-prometheus.monitoring.svc.{{ kubernetes_service_dns_domain | default('cluster.local') }}:9090"
+                basicAuth: false
+                editable: true
+                jsonData:
+                  httpMethod: GET
+                  exemplarTraceIdDestinations:
+                    - name: trace_id
+                      datasourceUid: tempo
+              - name: Loki
+                type: loki
+                uid: loki
+                access: proxy
+                orgId: 1
+                url: "http://loki.monitoring.svc.{{ kubernetes_service_dns_domain | default('cluster.local') }}:3100"
+                basicAuth: false
+                editable: true
+                jsonData:
+                  derivedFields:
+                    - name: trace_id
+                      matcherRegex: '"trace_id":"(\w+)"'
+                      url: '$${__value.raw}'
+                      datasourceUid: tempo
+              - name: Tempo
+                type: tempo
+                uid: tempo
+                access: proxy
+                orgId: 1
+                url: "http://tempo.monitoring.svc.{{ kubernetes_service_dns_domain | default('cluster.local') }}:3200"
+                basicAuth: false
+                editable: true
+                jsonData:
+                  httpMethod: GET
+                  serviceMap:
+                    datasourceUid: prometheus
+                  nodeGraph:
+                    enabled: true
+                  lokiSearch:
+                    datasourceUid: loki
+                  tracesToLogsV2:
+                    datasourceUid: loki
+                    spanStartTimeShift: '-1m'
+                    spanEndTimeShift: '1m'
+                    filterByTraceID: true
+                    filterBySpanID: false
+              - name: Pyroscope
+                type: grafana-pyroscope-datasource
+                uid: pyroscope
+                orgId: 1
+                access: proxy
+                url: "http://pyroscope.monitoring.svc.{{ kubernetes_service_dns_domain | default('cluster.local') }}:4040"
+                basicAuth: false
+                editable: true
+              - name: Alertmanager
+                type: alertmanager
+                uid: alertmanager
+                access: proxy
+                orgId: 1
+                url: "http://kube-prometheus-stack-alertmanager.monitoring.svc.{{ kubernetes_service_dns_domain | default('cluster.local') }}:9093"
+                basicAuth: false
+                editable: true
+                jsonData:
+                  implementation: prometheus
+        ingress:
+          enabled: "{{ grafana_ui_enabled | default(false) }}"
+          ingressClassName: "{{ kubernetes_ingress_class | default('nginx') }}"
+          annotations:
+            cert-manager.io/cluster-issuer: "{{ cert_manager_cluster_issuer | default('letsencrypt') }}"
+          hosts:
+            - "{{ grafana_ui_domain }}"
+          tls:
+            - secretName: "{{ grafana_ui_domain }}-tls"
+              hosts:
+                - "{{ grafana_ui_domain }}"
+      prometheus-node-exporter:
+        enabled: true
+      prometheus:
+        prometheusSpec:
+          ruleSelectorNilUsesHelmValues: false
+          serviceMonitorSelectorNilUsesHelmValues: false
+          podMonitorSelectorNilUsesHelmValues: false
+          enableFeatures:
+            - native-histograms
+          enableRemoteWriteReceiver: true
+          retention: "{{ prometheus_retention | default('30d') }}"
+          walCompression: true
+          storageSpec:
+            volumeClaimTemplate:
+              spec:
+                storageClassName: "{{ kubernetes_storage_class | default('longhorn') }}"
+                accessModes:
+                  - ReadWriteOnce
+                resources:
+                  requests:
+                    storage: "{{ prometheus_storage | default('50Gi') }}"
+
+- name: Install Loki
+  kubernetes.core.helm:
+    kubeconfig: /etc/kubernetes/admin.conf
+    chart_ref: loki
+    chart_repo_url: https://grafana.github.io/helm-charts
+    chart_version: "6.52.0"
+    create_namespace: false
+    release_name: loki
+    release_namespace: monitoring
+    release_state: present
+    release_values:
+      deploymentMode: SingleBinary
+      loki:
+        auth_enabled: false
+        commonConfig:
+          replication_factor: 1
+        schemaConfig:
+          configs:
+            - from: 2024-04-01
+              store: tsdb
+              object_store: s3
+              schema: v13
+              index:
+                prefix: loki_index_
+                period: 24h
+        limits_config:
+          allow_structured_metadata: true
+          volume_enabled: true
+          reject_old_samples: true
+          reject_old_samples_max_age: 168h
+          max_cache_freshness_per_query: 10m
+          split_queries_by_interval: 15m
+          query_timeout: 300s
+          retention_period: "{{ loki_retention | default('744h') }}"
+      singleBinary:
+        replicas: 1
+        persistence:
+          enabled: true
+          size: "{{ loki_storage | default('50Gi') }}"
+          storageClassName: "{{ kubernetes_storage_class | default('longhorn') }}"
+      minio:
+        enabled: true
+      gateway:
+        enabled: false
+      test:
+        enabled: false
+      monitoring:
+        selfMonitoring:
+          enabled: false
+          grafanaAgent:
+            installOperator: false
+        serviceMonitor:
+          enabled: true
+          labels:
+            release: kube-prometheus-stack
+      lokiCanary:
+        enabled: false
+      memberlist:
+        service:
+          publishNotReadyAddresses: true
+      backend:
+        replicas: 0
+      read:
+        replicas: 0
+      write:
+        replicas: 0
+      chunksCache:
+        enabled: false
+      resultsCache:
+        enabled: false
+
+- name: Install OpenTelemetry Collector - Logs
+  kubernetes.core.helm:
+    kubeconfig: /etc/kubernetes/admin.conf
+    chart_ref: opentelemetry-collector
+    chart_repo_url: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart_version: "0.145.0"
+    create_namespace: false
+    release_name: opentelemetry-collector-logs
+    release_namespace: monitoring
+    release_state: present
+    release_values:
+      fullnameOverride: opentelemetry-collector-logs
+      mode: daemonset
+      image:
+        repository: otel/opentelemetry-collector-contrib
+      command:
+        name: otelcol-contrib
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+      presets:
+        logsCollection:
+          enabled: false
+        hostMetrics:
+          enabled: false
+        kubernetesAttributes:
+          enabled: false
+        kubeletMetrics:
+          enabled: false
+        kubernetesEvents:
+          enabled: false
+        clusterMetrics:
+          enabled: false
+      extraVolumes:
+        - name: varlogpods
+          hostPath:
+            path: /var/log/pods
+        - name: varlibdockercontainers
+          hostPath:
+            path: /var/lib/docker/containers
+      extraVolumeMounts:
+        - name: varlogpods
+          mountPath: /var/log/pods
+          readOnly: true
+        - name: varlibdockercontainers
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+      config:
+        receivers:
+          filelog:
+            include:
+              - /var/log/pods/*/*/*.log
+            include_file_path: true
+            include_file_name: false
+            operators:
+              - type: router
+                id: get-format
+                routes:
+                  - output: parser-docker
+                    expr: 'body matches "^\\{"'
+                  - output: parser-crio
+                    expr: 'body matches "^[^ Z]+ "'
+                  - output: parser-containerd
+                    expr: 'body matches "^[^ Z]+Z"'
+              - type: regex_parser
+                id: parser-crio
+                regex: '^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]+) ?(?P<log>.*)$'
+                output: extract-metadata-from-filepath
+                timestamp:
+                  parse_from: attributes.time
+                  layout_type: gotime
+                  layout: '2006-01-02T15:04:05.000000000-07:00'
+              - type: regex_parser
+                id: parser-containerd
+                regex: '^(?P<time>[^ ^Z]+Z) (?P<stream>stdout|stderr) (?P<logtag>[^ ]+) ?(?P<log>.*)$'
+                output: extract-metadata-from-filepath
+                timestamp:
+                  parse_from: attributes.time
+                  layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+              - type: json_parser
+                id: parser-docker
+                output: extract-metadata-from-filepath
+                timestamp:
+                  parse_from: attributes.time
+                  layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+              - type: regex_parser
+                id: extract-metadata-from-filepath
+                regex: '^.*\/(?P<namespace>[^_]+)_(?P<pod_name>[^_]+)_(?P<uid>[a-f0-9\-]+)\/(?P<container_name>[^\._]+)\/(?P<restart_count>\d+)\.log$'
+                parse_from: attributes["log.file.path"]
+              - type: move
+                from: attributes.log
+                to: body
+              - type: move
+                from: attributes.stream
+                to: attributes["log.iostream"]
+              - type: move
+                from: attributes.container_name
+                to: resource["k8s.container.name"]
+              - type: move
+                from: attributes.namespace
+                to: resource["k8s.namespace.name"]
+              - type: move
+                from: attributes.pod_name
+                to: resource["k8s.pod.name"]
+              - type: move
+                from: attributes.restart_count
+                to: resource["k8s.container.restart_count"]
+              - type: move
+                from: attributes.uid
+                to: resource["k8s.pod.uid"]
+          otlp:
+            protocols:
+              grpc:
+                endpoint: 0.0.0.0:4317
+              http:
+                endpoint: 0.0.0.0:4318
+        processors:
+          batch: {}
+          resource:
+            attributes:
+              - action: upsert
+                key: service.name
+                from_attribute: k8s.pod.name
+        exporters:
+          otlphttp/loki:
+            endpoint: "http://loki.monitoring.svc.{{ kubernetes_service_dns_domain | default('cluster.local') }}:3100/otlp"
+            tls:
+              insecure: true
+            sending_queue:
+              enabled: true
+              queue_size: 5000
+            retry_on_failure:
+              enabled: true
+              initial_interval: 5s
+              max_interval: 30s
+              max_elapsed_time: 300s
+        service:
+          pipelines:
+            logs:
+              receivers: [filelog, otlp]
+              processors: [resource, batch]
+              exporters: [otlphttp/loki]
+      ports:
+        otlp:
+          enabled: false
+        otlp-http:
+          enabled: false
+        jaeger-compact:
+          enabled: false
+        jaeger-thrift:
+          enabled: false
+        jaeger-grpc:
+          enabled: false
+        zipkin:
+          enabled: false
+      resources:
+        limits:
+          cpu: 500m
+          memory: 512Mi
+        requests:
+          cpu: 100m
+          memory: 256Mi
+
+- name: Install OpenTelemetry Collector - Metrics
+  kubernetes.core.helm:
+    kubeconfig: /etc/kubernetes/admin.conf
+    chart_ref: opentelemetry-collector
+    chart_repo_url: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart_version: "0.145.0"
+    create_namespace: false
+    release_name: opentelemetry-collector-metrics
+    release_namespace: monitoring
+    release_state: present
+    release_values:
+      fullnameOverride: opentelemetry-collector-metrics
+      mode: deployment
+      image:
+        repository: otel/opentelemetry-collector-contrib
+      command:
+        name: otelcol-contrib
+        extraArgs:
+          - "--feature-gates=receiver.prometheusreceiver.EnableNativeHistograms"
+      clusterRole:
+        create: true
+        rules:
+          - apiGroups: ['']
+            resources: ['pods', 'nodes']
+            verbs: ['get', 'list', 'watch']
+      ports:
+        promexporter:
+          enabled: true
+          containerPort: 9099
+          servicePort: 9099
+          protocol: TCP
+      config:
+        receivers:
+          prometheus/kgateway-dataplane:
+            config:
+              global:
+                scrape_protocols:
+                  - PrometheusProto
+                  - OpenMetricsText1.0.0
+                  - OpenMetricsText0.0.1
+                  - PrometheusText0.0.4
+              scrape_configs:
+                - job_name: kgateway-gateways
+                  honor_labels: true
+                  kubernetes_sd_configs:
+                    - role: pod
+                  relabel_configs:
+                    - action: keep
+                      regex: kgateway
+                      source_labels:
+                        - __meta_kubernetes_pod_label_kgateway
+                    - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+                      action: keep
+                      regex: true
+                    - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+                      action: replace
+                      target_label: __metrics_path__
+                      regex: (.+)
+                    - action: replace
+                      source_labels:
+                        - __meta_kubernetes_pod_ip
+                        - __meta_kubernetes_pod_annotation_prometheus_io_port
+                      separator: ':'
+                      target_label: __address__
+                    - action: labelmap
+                      regex: __meta_kubernetes_pod_label_(.+)
+                    - source_labels: [__meta_kubernetes_namespace]
+                      action: replace
+                      target_label: kube_namespace
+                    - source_labels: [__meta_kubernetes_pod_name]
+                      action: replace
+                      target_label: pod
+          prometheus/kgateway-controlplane:
+            config:
+              global:
+                scrape_protocols:
+                  - PrometheusProto
+                  - OpenMetricsText1.0.0
+                  - OpenMetricsText0.0.1
+                  - PrometheusText0.0.4
+              scrape_configs:
+                - job_name: kgateway-controlplane
+                  honor_labels: true
+                  kubernetes_sd_configs:
+                    - role: pod
+                  relabel_configs:
+                    - action: keep
+                      regex: kgateway
+                      source_labels:
+                        - __meta_kubernetes_pod_label_kgateway
+                    - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+                      action: keep
+                      regex: true
+                    - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+                      action: replace
+                      target_label: __metrics_path__
+                      regex: (.+)
+                    - action: replace
+                      source_labels:
+                        - __meta_kubernetes_pod_ip
+                        - __meta_kubernetes_pod_annotation_prometheus_io_port
+                      separator: ':'
+                      target_label: __address__
+                    - action: labelmap
+                      regex: __meta_kubernetes_pod_label_(.+)
+                    - source_labels: [__meta_kubernetes_namespace]
+                      action: replace
+                      target_label: kube_namespace
+                    - source_labels: [__meta_kubernetes_pod_name]
+                      action: replace
+                      target_label: pod
+        exporters:
+          prometheusremotewrite/kube-prometheus-stack:
+            endpoint: "http://kube-prometheus-stack-prometheus.monitoring.svc.{{ kubernetes_service_dns_domain | default('cluster.local') }}:9090/api/v1/write"
+        service:
+          pipelines:
+            metrics:
+              receivers:
+                - prometheus/kgateway-dataplane
+                - prometheus/kgateway-controlplane
+              processors: [batch]
+              exporters: [prometheusremotewrite/kube-prometheus-stack]
+
+- name: Install Tempo
+  when: tempo_enabled | default(false) | bool
+  kubernetes.core.helm:
+    kubeconfig: /etc/kubernetes/admin.conf
+    chart_ref: tempo
+    chart_repo_url: https://grafana.github.io/helm-charts
+    chart_version: "1.26.2"
+    create_namespace: false
+    release_name: tempo
+    release_namespace: monitoring
+    release_state: present
+    release_values:
+      fullnameOverride: tempo
+      persistence:
+        enabled: true
+        size: "{{ tempo_storage | default('20Gi') }}"
+        storageClassName: "{{ kubernetes_storage_class | default('longhorn') }}"
+      tempo:
+        receivers:
+          otlp:
+            protocols:
+              grpc:
+                endpoint: 0.0.0.0:4317
+              http:
+                endpoint: 0.0.0.0:4318
+        metricsGenerator:
+          enabled: true
+          remoteWriteUrl: "http://kube-prometheus-stack-prometheus.monitoring.svc.{{ kubernetes_service_dns_domain | default('cluster.local') }}:9090/api/v1/write"
+        storage:
+          trace:
+            backend: local
+            local:
+              path: /var/tempo/traces
+            wal:
+              path: /var/tempo/wal
+        querier:
+          max_concurrent_queries: 20
+        query_frontend:
+          max_retries: 2
+        overrides:
+          defaults:
+            metrics_generator:
+              processors:
+                - service-graphs
+                - span-metrics
+      serviceMonitor:
+        enabled: true
+        additionalLabels:
+          release: kube-prometheus-stack
+
+- name: Install OpenTelemetry Collector - Traces
+  when: tempo_enabled | default(false) | bool
+  kubernetes.core.helm:
+    kubeconfig: /etc/kubernetes/admin.conf
+    chart_ref: opentelemetry-collector
+    chart_repo_url: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart_version: "0.145.0"
+    create_namespace: false
+    release_name: opentelemetry-collector-traces
+    release_namespace: monitoring
+    release_state: present
+    release_values:
+      fullnameOverride: opentelemetry-collector-traces
+      mode: deployment
+      image:
+        repository: otel/opentelemetry-collector-contrib
+      command:
+        name: otelcol-contrib
+      config:
+        receivers:
+          otlp:
+            protocols:
+              grpc:
+                endpoint: 0.0.0.0:4317
+              http:
+                endpoint: 0.0.0.0:4318
+        exporters:
+          otlp/tempo:
+            endpoint: "http://tempo.monitoring.svc.{{ kubernetes_service_dns_domain | default('cluster.local') }}:4317"
+            tls:
+              insecure: true
+        service:
+          pipelines:
+            traces:
+              receivers: [otlp]
+              processors: [batch]
+              exporters: [otlp/tempo]
+
+- name: Install Pyroscope
+  when: pyroscope_enabled | default(false) | bool
+  kubernetes.core.helm:
+    kubeconfig: /etc/kubernetes/admin.conf
+    chart_ref: pyroscope
+    chart_repo_url: https://grafana.github.io/helm-charts
+    chart_version: "1.17.0"
+    create_namespace: false
+    release_name: pyroscope
+    release_namespace: monitoring
+    release_state: present
+    release_values:
+      fullnameOverride: pyroscope
+      pyroscope:
+        persistence:
+          enabled: true
+          size: "{{ pyroscope_storage | default('20Gi') }}"
+          storageClassName: "{{ kubernetes_storage_class | default('longhorn') }}"
+      serviceMonitor:
+        enabled: true
+        labels:
+          release: kube-prometheus-stack
+
+# - name: Install OpenTelemetry Operator
+#   kubernetes.core.helm:
+#     kubeconfig: /etc/kubernetes/admin.conf
+#     chart_ref: opentelemetry-operator
+#     chart_repo_url: https://open-telemetry.github.io/opentelemetry-helm-charts
+#     chart_version: "0.106.0"
+#     create_namespace: false
+#     release_name: opentelemetry-operator
+#     release_namespace: monitoring
+#     release_state: present
+#     release_values:
+#       manager:
+#         collectorImage:
+#           repository: otel/opentelemetry-collector-contrib
+#           tag: "0.145.0"
+#         serviceMonitor:
+#           enabled: true
+#           extraLabels:
+#             release: kube-prometheus-stack
+#       admissionWebhooks:
+#         certManager:
+#           enabled: true
+#         autoGenerateCert:
+#           enabled: false
+
+# - name: Create OTel default Instrumentation CR
+#   kubernetes.core.k8s:
+#     kubeconfig: /etc/kubernetes/admin.conf
+#     state: present
+#     definition:
+#       apiVersion: opentelemetry.io/v1alpha1
+#       kind: Instrumentation
+#       metadata:
+#         name: default-instrumentation
+#         namespace: monitoring
+#       spec:
+#         exporter:
+#           endpoint: "http://opentelemetry-collector-traces.monitoring.svc.{{ kubernetes_service_dns_domain | default('cluster.local') }}:4317"
+#         propagators:
+#           - tracecontext
+#           - baggage
+#           - b3
+#         sampler:
+#           type: parentbased_traceidratio
+#           argument: "1.0"
+#         java:
+#           env:
+#             - name: OTEL_EXPORTER_OTLP_ENDPOINT
+#               value: "http://opentelemetry-collector-traces.monitoring.svc.{{ kubernetes_service_dns_domain | default('cluster.local') }}:4317"
+#         python:
+#           env:
+#             - name: OTEL_EXPORTER_OTLP_ENDPOINT
+#               value: "http://opentelemetry-collector-traces.monitoring.svc.{{ kubernetes_service_dns_domain | default('cluster.local') }}:4318"
+#         nodejs:
+#           env:
+#             - name: OTEL_EXPORTER_OTLP_ENDPOINT
+#               value: "http://opentelemetry-collector-traces.monitoring.svc.{{ kubernetes_service_dns_domain | default('cluster.local') }}:4317"
+#         dotnet:
+#           env:
+#             - name: OTEL_EXPORTER_OTLP_ENDPOINT
+#               value: "http://opentelemetry-collector-traces.monitoring.svc.{{ kubernetes_service_dns_domain | default('cluster.local') }}:4318"
+

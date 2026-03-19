@@ -1,0 +1,154 @@
+---
+- name: Install Velero CLI
+  ansible.builtin.unarchive:
+    src: "https://github.com/vmware-tanzu/velero/releases/download/{{ velero_version | default('v1.16.2') }}/velero-{{ velero_version | default('v1.16.2') }}-linux-amd64.tar.gz"
+    dest: /tmp
+    remote_src: yes
+    creates: "/tmp/velero-{{ velero_version | default('v1.16.2') }}-linux-amd64/velero"
+
+- name: Move Velero CLI to PATH
+  ansible.builtin.copy:
+    src: "/tmp/velero-{{ velero_version | default('v1.16.2') }}-linux-amd64/velero"
+    dest: /usr/local/bin/velero
+    mode: '0755'
+    remote_src: yes
+
+- name: Apply VolumeSnapshot CRDs
+  kubernetes.core.k8s:
+    kubeconfig: /etc/kubernetes/admin.conf
+    state: present
+    src: "{{ item }}"
+  loop:
+    - "https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/{{ snapshot_version | default('v8.3.0') }}/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml"
+    - "https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/{{ snapshot_version | default('v8.3.0') }}/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml"
+    - "https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/{{ snapshot_version | default('v8.3.0') }}/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml"
+
+- name: Install the Common Snapshot Controller
+  kubernetes.core.k8s:
+    kubeconfig: /etc/kubernetes/admin.conf
+    state: present
+    src: "{{ item }}"
+    namespace: kube-system
+  loop:
+    - "https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/{{ snapshot_version | default('v8.3.0') }}/deploy/kubernetes/snapshot-controller/rbac-snapshot-controller.yaml"
+    - "https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/{{ snapshot_version | default('v8.3.0') }}/deploy/kubernetes/snapshot-controller/setup-snapshot-controller.yaml"
+
+- name: Create VolumeSnapshotClass
+  kubernetes.core.k8s:
+    kubeconfig: /etc/kubernetes/admin.conf
+    state: present
+    definition:
+      apiVersion: snapshot.storage.k8s.io/v1
+      kind: VolumeSnapshotClass
+      metadata:
+        name: longhorn-snapshot-vsc
+        labels:
+          velero.io/csi-volumesnapshot-class: "true"
+      driver: "driver.longhorn.io"
+      deletionPolicy: Delete
+      parameters:
+        type: bak
+
+- name: Create Velero Node Agent ConfigMap
+  kubernetes.core.k8s:
+    kubeconfig: /etc/kubernetes/admin.conf
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: velero-node-agent-cfg
+        namespace: velero
+      data:
+        node-agent-config.json: |
+          {
+            "backupPVC": {
+              "longhorn": {
+                "storageClass": "longhorn"
+              }
+            }
+          }
+
+- name: Install Velero
+  kubernetes.core.helm:
+    kubeconfig: /etc/kubernetes/admin.conf
+    chart_ref: velero
+    chart_repo_url: https://vmware-tanzu.github.io/helm-charts
+    chart_version: "10.1.3"
+    create_namespace: true
+    release_name: velero
+    release_namespace: velero
+    release_state: present
+    release_values:
+      fullnameOverride: velero
+      image:
+        tag: "{{ velero_cli_version | default('v1.16.2') }}"
+      credentials:
+        useSecret: true
+        name: credentials-velero
+        secretContents:
+          cloud: |
+            [default]
+            aws_access_key_id={{ velero_s3_access_key }}
+            aws_secret_access_key={{ velero_s3_secret_key }}
+      configuration:
+        backupStorageLocation:
+        - name: default
+          provider: aws
+          bucket: "{{ velero_s3_bucket }}"
+          accessMode: "{{ velero_s3_access_mode | default('ReadWrite') }}"
+          config:
+            region: "{{ velero_s3_region | default('default') }}"
+            s3Url: "{{ velero_s3_endpoint }}"
+            s3ForcePathStyle: true
+        volumeSnapshotLocation:
+        - name: default
+          provider: driver.longhorn.io
+          config: {}
+        features: "EnableCSI"
+        defaultSnapshotMoveData: true
+      deployNodeAgent: true
+      nodeAgent:
+        podVolumePath: /var/lib/kubelet/pods
+        pluginVolumePath: /var/lib/kubelet/plugins
+        configmap: velero-node-agent-cfg
+        privileged: true
+        resources:
+          requests:
+            cpu: "{{ node_agent_cpu_request | default('250m') }}"
+            memory: "{{ node_agent_memory_request | default('2Gi') }}"
+          limits:
+            cpu: "{{ node_agent_cpu_limit | default('2000m') }}"
+            memory: "{{ node_agent_memory_limit | default('4Gi') }}"
+      resources:
+        requests:
+          cpu: "{{ velero_cpu_request | default('250m') }}"
+          memory: "{{ velero_memory_request | default('1Gi') }}"
+        limits:
+          cpu: "{{ velero_cpu_limit | default('2000m') }}"
+          memory: "{{ velero_memory_limit | default('1.5Gi') }}"
+      initContainers:
+      - name: velero-plugin-for-aws
+        image: "velero/velero-plugin-for-aws:{{ velero_aws_plugin_version | default('v1.12.2') }}"
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+          - mountPath: /target
+            name: plugins
+      schedules: "{{ velero_schedules | default({}) }}"
+
+- name: Create StorageClass mapping ConfigMap for cross-cluster restore
+  kubernetes.core.k8s:
+    kubeconfig: /etc/kubernetes/admin.conf
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: change-storage-class-config
+        namespace: velero
+        labels:
+          velero.io/plugin-config: ""
+          velero.io/change-storage-class: RestoreItemAction
+      data:
+        longhorn: longhorn
+  when: velero_s3_access_mode == "ReadOnly"

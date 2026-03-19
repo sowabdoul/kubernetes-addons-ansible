@@ -1,0 +1,40 @@
+---
+- name: Install Container Storage Interface for Openstack Cinder
+  kubernetes.core.helm:
+    kubeconfig: /etc/kubernetes/admin.conf
+    chart_ref: openstack-cinder-csi
+    chart_repo_url: https://kubernetes.github.io/cloud-provider-openstack/
+    chart_version: "2.31.1"
+    create_namespace: true
+    release_name: openstack-cinder-csi
+    release_namespace: openstack-cinder-csi
+    release_state: present
+    release_values:
+      fullnameOverride: openstack-cinder-csi
+      secret:
+        enabled: true
+        hostMount: false
+        create: true
+        name: openstack-cinder-csi-cloud-config
+        data:
+          cloud.conf: |-
+            [Global]
+            region={{ openstack_auth_region }}
+            auth-url={{ openstack_auth_url }}
+            os-endpoint-type={{ openstack_endpoint_type | default('public') }}
+            application-credential-id={{ openstack_application_credential_id }}
+            application-credential-secret={{ openstack_application_credential_secret }}
+      storageClass:
+        enabled: true
+        custom: |-
+          ---
+          apiVersion: storage.k8s.io/v1
+          kind: StorageClass
+          metadata:
+            name: cinder
+            annotations:
+              storageclass.kubernetes.io/is-default-class: "true"
+          provisioner: cinder.csi.openstack.org
+          volumeBindingMode: WaitForFirstConsumer
+          allowVolumeExpansion: true
+      clusterID: "{{ kubernetes_cluster_name }}"
