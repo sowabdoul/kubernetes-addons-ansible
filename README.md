@@ -20,7 +20,7 @@ Each task installs and configures a specific addon via Helm, with variables expo
 
 Install collections :
 ```bash
-ansible-galaxy collection install -r requirements.yml
+ansible-galaxy collection install kubernetes.core community.general
 ```
 
 ## Usage
