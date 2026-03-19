@@ -1,0 +1,70 @@
+---
+- name: Install Ingress Nginx Controller chart
+  kubernetes.core.helm:
+    kubeconfig: /etc/kubernetes/admin.conf
+    chart_ref: ingress-nginx
+    chart_repo_url: https://kubernetes.github.io/ingress-nginx
+    chart_version: "4.11.3"
+    create_namespace: true
+    release_name: ingress-nginx
+    release_namespace: ingress-nginx
+    release_state: present
+    release_values:
+      fullnameOverride: ingress-nginx
+      controller:
+        ingressClassResource:
+          name: nginx
+          enabled: true
+          default: true
+        ingressClass: nginx
+        allowSnippetAnnotations: true
+        healthCheckPath: "{{ ingress_health_check_path | default('/healthz') }}"
+        service:
+          type: LoadBalancer
+          nodePorts:
+            http: 30080
+            https: 30443
+          annotations:
+            kube-vip.io/loadbalancerIPs: "{{ ingress_nginx_load_balancer_ip }}"
+          externalTrafficPolicy: "Local"
+        resources:
+          requests:
+            cpu: 1
+            memory: 1Gi
+          limits:
+            cpu: 2
+            memory: 2Gi
+        autoscaling:
+          enabled: true
+          minReplicas: 3
+          maxReplicas: "{{ ingress_autoscaling_max_replicas | default(3) }}"
+
+#- name: Install Ingress Nginx Internal Controller chart
+#  kubernetes.core.helm:
+#    kubeconfig: /etc/kubernetes/admin.conf
+#    chart_ref: ingress-nginx
+#    chart_repo_url: https://kubernetes.github.io/ingress-nginx
+#    chart_version: "4.11.3"
+#    create_namespace: true
+#    release_name: ingress-nginx
+#    release_namespace: ingress-nginx-internal
+#    release_state: present
+#    release_values:
+#      fullnameOverride: ingress-nginx-internal
+#      controller:
+#        ingressClassResource:
+#          name: nginx-internal
+#          enabled: true
+#          default: false
+#        ingressClass: nginx-internal
+#        allowSnippetAnnotations: true
+#        healthCheckPath: "{{ ingress_health_check_path | default('/healthz') }}"
+#        service:
+#          annotations:
+#            kube-vip.io/loadbalancerIPs: "{{ ingress_nginx_internal_load_balancer_ip }}"
+#            loadbalancer.openstack.org/load-balancer-address: "{{ ingress_nginx_internal_load_balancer_ip }}"
+#          externalTrafficPolicy: "Local"
+#        autoscaling:
+#          enabled: false
+#          minReplicas: 1
+#          maxReplicas: "{{ ingress_autoscaling_max_replicas | default(3) }}"

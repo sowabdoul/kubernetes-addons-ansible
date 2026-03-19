@@ -1,0 +1,66 @@
+[kubernetes:children]
+kubernetes_controllers
+kubernetes_workers
+
+[kubernetes_controllers]
+kubernetes_controller1 ansible_host=
+kubernetes_controller2 ansible_host=
+kubernetes_controller3 ansible_host=
+
+[kubernetes_workers]
+kubernetes_worker1 ansible_host=
+kubernetes_worker2 ansible_host=
+kubernetes_worker3 ansible_host=
+
+[kubernetes:vars]
+# Longhorn variables
+longhorn_default_class_replica_count=1
+longhorn_default_data_locality=best-effort
+longhorn_ui_domain=csi.kube.example.com
+longhorn_ui_admin_username=admin
+longhorn_ui_admin_password=changeme
+longhorn_disk_path=/dev/sdb
+longhorn_mount_point=/mnt
+
+# Rancher variables
+rancher_ui_domain=admin.kube.example.com
+rancher_ui_admin_password=changeme
+
+# OpenStack variables
+openstack_auth_region=your-region
+openstack_auth_url=https://your-openstack:5000
+openstack_application_credential_id=your-credential-id
+openstack_application_credential_secret=your-credential-secret
+
+# Ingress variables
+ingress_health_check_path=/healthz
+ingress_autoscaling_max_replicas=6
+ingress_nginx_load_balancer_ip=X.X.X.X
+
+# Monitoring variables
+grafana_ui_enabled=true
+grafana_ui_domain=grafana.example.com
+grafana_ui_admin_password=changeme
+alertmanager_smtp_host=mailout.example.com:587
+alertmanager_smtp_require_tls=true
+alertmanager_smtp_from=alertmanager@example.com
+alertmanager_smtp_username=alertmanager
+alertmanager_smtp_password=changeme
+alert_receiver_mail=support@example.com
+grafana_storage=10Gi
+prometheus_retention=30d
+prometheus_storage=50Gi
+loki_retention=744h
+loki_storage=50Gi
+tempo_enabled=false
+tempo_storage=20Gi
+pyroscope_enabled=false
+pyroscope_storage=20Gi
+
+# Velero variables
+velero_cli_version=v1.16.2
+velero_s3_bucket=velero
+velero_s3_endpoint=https://your-s3-endpoint
+velero_s3_access_key=your-access-key
+velero_s3_secret_key=your-secret-key
+
