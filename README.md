@@ -5,13 +5,13 @@ Each task installs and configures a specific addon via Helm, with variables expo
 ## Addons
 | Task | Description |
 |------|-------------|
-| monitoring.yml | Kube Prometheus Stack, Grafana, Loki, Tempo, Pyroscope, OpenTelemetry |
-| longhorn.yml | Distributed block storage with RWO and RWX StorageClasses |
-| velero.yml | Cluster backup and restore with S3 backend and CSI snapshot support |
-| rancher.yml | Multi-cluster Kubernetes management UI |
-| ingress.yml | Nginx ingress controller with autoscaling and load balancer support |
-| openstack-cinder-csi.yml | OpenStack Cinder CSI driver for persistent volumes |
-| openstack-cloud-controller.yml | OpenStack cloud controller manager integration |
+| [monitoring.yml](ansible/tasks/monitoring.yml) | Kube Prometheus Stack, Grafana, Loki, Tempo, Pyroscope, OpenTelemetry |
+| [longhorn.yml](ansible/tasks/longhorn.yml) | Distributed block storage with RWO and RWX StorageClasses |
+| [velero.yml](ansible/tasks/velero.yml) | Cluster backup and restore with S3 backend and CSI snapshot support |
+| [rancher.yml](ansible/tasks/rancher.yml) | Multi-cluster Kubernetes management UI |
+| [ingress.yml](ansible/tasks/ingress.yml) | Nginx ingress controller with autoscaling and load balancer support |
+| [openstack-cinder-csi.yml](ansible/tasks/openstack-cinder-csi.yml) | OpenStack Cinder CSI driver for persistent volumes |
+| [openstack-cloud-controller.yml](ansible/tasks/openstack-cloud-controller.yml) | OpenStack cloud controller manager integration |
 
 ## Requirements
 - Ansible 2.15+
