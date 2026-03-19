@@ -54,6 +54,3 @@ ansible-playbook -i ansible/inventories/kubernetes/hosts.ini ansible/tasks/monit
 └── README.md
 ```
 
-## Maintainer
-[Abdoulaye Sow](https://github.com/sowabdoul)
-
