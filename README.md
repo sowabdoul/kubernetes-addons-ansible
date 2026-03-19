@@ -5,6 +5,7 @@ Each task installs and configures a specific addon via Helm, with variables expo
 ## Addons
 | Task | Description |
 |------|-------------|
+| [cert-manager.yml](ansible/tasks/cert-manager.yml) | Certificate management with Let's Encrypt and automatic renewal |
 | [monitoring.yml](ansible/tasks/monitoring.yml) | Kube Prometheus Stack, Grafana, Loki, Tempo, Pyroscope, OpenTelemetry |
 | [longhorn.yml](ansible/tasks/longhorn.yml) | Distributed block storage with RWO and RWX StorageClasses |
 | [velero.yml](ansible/tasks/velero.yml) | Cluster backup and restore with S3 backend and CSI snapshot support |
