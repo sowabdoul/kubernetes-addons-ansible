@@ -62,20 +62,44 @@
         volumeBindingMode: "WaitForFirstConsumer"
         migratable: true
         reclaimPolicy: "Retain"
+        recurringJobSelector:
+          enable: true
+          jobList: '[{"name":"default", "isGroup":true}]'
       defaultSettings:
         defaultDataLocality: "{{ longhorn_default_data_locality | default('best-effort') }}"
         defaultDataPath: "{{ longhorn_mount_point }}"
         replicaAutoBalance: "{{ longhorn_replica_auto_balance | default('best-effort') }}"
         storageMinimalAvailablePercentage: 1
         storageReservedPercentageForDefaultDisk: 0
+        autoCleanupSystemGeneratedSnapshot: true
+        recurringJobSelectorEnabled: true
+        recurringJobSelectorList: '[{"name":"default", "isGroup":true}]'
+      recurringJobs:
+        - name: "snapshot-delete"
+          task: "snapshot-delete"
+          cron: "0 1 * * *"
+          retain: 5
+          groups: ["default"]
+        - name: "snapshot-cleanup"
+          task: "snapshot-cleanup"
+          cron: "0 2 * * *"
+          retain: 0
+          groups: ["default"]
+        - name: "filesystem-trim"
+          task: "filesystem-trim"
+          cron: "0 3 * * *" 
+          retain: 0
+          groups: ["default"]
       longhornUI:
         replicas: "{{ longhorn_replica_ui | default(1) }}"
       longhornManager:
-        tolerations: # Not affecting other environments
+        tolerations: 
+          {% if kubernetes_node_taints is defined %}
           - effect: NoSchedule
             key: sandbox
             operator: Equal
             value: "true"
+          {% endif %}
           - effect: NoExecute
             key: node.kubernetes.io/not-ready
             operator: Exists
@@ -83,11 +107,13 @@
             key: node.kubernetes.io/unreachable
             operator: Exists
       longhornDriver:
-        tolerations: # Not affecting other environments
+        tolerations: 
+          {% if kubernetes_node_taints is defined %}
           - effect: NoSchedule
             key: sandbox
             operator: Equal
             value: "true"
+          {% endif %}
           - effect: NoExecute
             key: node.kubernetes.io/not-ready
             operator: Exists
@@ -128,54 +154,59 @@
         staleReplicaTimeout: "3600"
         fsType: "xfs"
         dataLocality: "best-effort"
+        recurringJobSelector: '[{"name":"default", "isGroup":true}]'
 
-- name: Create ReadWriteOnce Volume StorageClass for Sandbox
+- name: Setup Sandbox StorageClasses
   when: kubernetes_node_taints is defined
-  kubernetes.core.k8s:
-    kubeconfig: /etc/kubernetes/admin.conf
-    state: present
-    definition:
-      kind: StorageClass
-      apiVersion: storage.k8s.io/v1
-      metadata:
-        name: longhorn-sandbox
-        annotations:
-          storageclass.kubernetes.io/is-default-class: "false"
-      provisioner: driver.longhorn.io
-      allowVolumeExpansion: true
-      reclaimPolicy: Retain
-      volumeBindingMode: WaitForFirstConsumer
-      parameters:
-        numberOfReplicas: "1"
-        staleReplicaTimeout: "3600"
-        fsType: "xfs"
-        dataLocality: "best-effort"
-        nodeSelector: "sandbox"
-        replicaAutoBalance: "best-effort"
+  block:
+    - name: Create ReadWriteOnce Volume StorageClass for Sandbox
+      kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        state: present
+        definition:
+          kind: StorageClass
+          apiVersion: storage.k8s.io/v1
+          metadata:
+            name: longhorn-sandbox
+            annotations:
+              storageclass.kubernetes.io/is-default-class: "false"
+          provisioner: driver.longhorn.io
+          allowVolumeExpansion: true
+          reclaimPolicy: Retain
+          volumeBindingMode: WaitForFirstConsumer
+          parameters:
+            numberOfReplicas: "1"
+            staleReplicaTimeout: "3600"
+            fsType: "xfs"
+            dataLocality: "best-effort"
+            nodeSelector: "sandbox"
+            replicaAutoBalance: "best-effort"
+            recurringJobSelector: '[{"name":"default", "isGroup":true}]'
 
-- name: Create ReadWriteMany Volume StorageClass for Sandbox
-  when: kubernetes_node_taints is defined
-  kubernetes.core.k8s:
-    kubeconfig: /etc/kubernetes/admin.conf
-    state: present
-    definition:
-      kind: StorageClass
-      apiVersion: storage.k8s.io/v1
-      metadata:
-        name: longhorn-rwx-sandbox
-        annotations:
-          storageclass.kubernetes.io/is-default-class: "false"
-      provisioner: driver.longhorn.io
-      allowVolumeExpansion: true
-      reclaimPolicy: Retain
-      volumeBindingMode: Immediate
-      parameters:
-        migratable: "false"
-        numberOfReplicas: "1"
-        staleReplicaTimeout: "3600"
-        fsType: "xfs"
-        dataLocality: "best-effort"
-        nodeSelector: "sandbox"
-        replicaAutoBalance: "best-effort"
-        shareManagerNodeSelector: "environment: sandbox" 
-        shareManagerTolerations: "sandbox=true:NoSchedule"
+    - name: Create ReadWriteMany Volume StorageClass for Sandbox
+      kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        state: present
+        definition:
+          kind: StorageClass
+          apiVersion: storage.k8s.io/v1
+          metadata:
+            name: longhorn-rwx-sandbox
+            annotations:
+              storageclass.kubernetes.io/is-default-class: "false"
+          provisioner: driver.longhorn.io
+          allowVolumeExpansion: true
+          reclaimPolicy: Retain
+          volumeBindingMode: Immediate
+          parameters:
+            migratable: "false"
+            numberOfReplicas: "1"
+            staleReplicaTimeout: "3600"
+            fsType: "xfs"
+            dataLocality: "best-effort"
+            nodeSelector: "sandbox"
+            replicaAutoBalance: "best-effort"
+            shareManagerNodeSelector: "environment: sandbox" 
+            shareManagerTolerations: "sandbox=true:NoSchedule"
+            recurringJobSelector: '[{"name":"default", "isGroup":true}]'
+
