@@ -1,0 +1,10 @@
+velero_s3_access_mode: "ReadWrite"
+velero_schedules:
+  daily-backup:
+    schedule: "0 2 * * *"
+    template:
+      ttl: "720h"
+      includedNamespaces: ["*"]
+      excludedNamespaces: ["kube-system", "velero", "longhorn-system"]
+      snapshotMoveData: true
+
