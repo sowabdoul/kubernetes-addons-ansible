@@ -95,8 +95,9 @@
       image:
         tag: "{{ velero_cli_version | default('v1.16.2') }}"
       kubectl:
-        repository: registry.k8s.io/kubectl
-        tag: "{{ velero_kubectl_image_tag | default('v1.34.5') }}"
+        image:
+          repository: registry.k8s.io/kubectl
+          tag: "{{ velero_kubectl_image_tag | default('v1.34.3') }}"
       credentials:
         useSecret: true
         name: credentials-velero
