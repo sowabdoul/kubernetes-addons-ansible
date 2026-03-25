@@ -40,18 +40,21 @@ ansible-playbook -i ansible/inventories/kubernetes/hosts.ini ansible/tasks/monit
 ```
 .
 ├── ansible
-│   ├── inventories
-│   │   └── kubernetes
-│   │       └── hosts.ini.example
-│   └── tasks
-│       ├── ingress.yml
-│       ├── longhorn.yml
-│       ├── monitoring.yml
-│       ├── openstack-cinder-csi.yml
-│       ├── openstack-cloud-controller.yml
-│       ├── rancher.yml
-│       └── velero.yml
-├── requirements.yml
+│   ├── inventories
+│   │   └── kubernetes
+│   │       ├── group_vars
+│   │       │   ├── all.yml
+│   │       │   └── kubernetes.yml
+│   │       └── hosts.ini.example
+│   └── tasks
+│       ├── cert-manager.yml
+│       ├── ingress-nginx.yml
+│       ├── longhorn.yml
+│       ├── monitoring.yml
+│       ├── openstack-cinder-csi.yml
+│       ├── openstack-cloud-controller.yml
+│       ├── rancher.yml
+│       └── velero.yml
 └── README.md
 ```
 
