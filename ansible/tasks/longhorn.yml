@@ -8,7 +8,7 @@
 
 - name: Create Longhorn Kubernetes namespace
   kubernetes.core.k8s:
-    kubeconfig: /etc/kubernetes/admin.conf
+    kubeconfig: "{{ kubeconfig }}"
     name: longhorn-system
     api_version: v1
     kind: Namespace
@@ -30,7 +30,7 @@
 
 - name: Create longhorn basic auth secret
   kubernetes.core.k8s:
-    kubeconfig: /etc/kubernetes/admin.conf
+    kubeconfig: "{{ kubeconfig }}"
     state: present
     definition:
       apiVersion: v1
@@ -44,7 +44,7 @@
 
 - name: Install Container Storage Interface for Longhorn
   kubernetes.core.helm:
-    kubeconfig: /etc/kubernetes/admin.conf
+    kubeconfig: "{{ kubeconfig }}"
     chart_ref: longhorn
     chart_repo_url: https://charts.longhorn.io
     chart_version: "1.9.2"
@@ -137,7 +137,7 @@
 
 - name: Create ReadWriteMany Volume StorageClass
   kubernetes.core.k8s:
-    kubeconfig: /etc/kubernetes/admin.conf
+    kubeconfig: "{{ kubeconfig }}"
     state: present
     definition:
       kind: StorageClass
@@ -161,7 +161,7 @@
   block:
     - name: Create ReadWriteOnce Volume StorageClass for Sandbox
       kubernetes.core.k8s:
-        kubeconfig: /etc/kubernetes/admin.conf
+        kubeconfig: "{{ kubeconfig }}"
         state: present
         definition:
           kind: StorageClass
@@ -185,7 +185,7 @@
 
     - name: Create ReadWriteMany Volume StorageClass for Sandbox
       kubernetes.core.k8s:
-        kubeconfig: /etc/kubernetes/admin.conf
+        kubeconfig: "{{ kubeconfig }}"
         state: present
         definition:
           kind: StorageClass

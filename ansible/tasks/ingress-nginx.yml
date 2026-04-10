@@ -1,7 +1,7 @@
 ---
 - name: Create ingress PriorityClass
   kubernetes.core.k8s:
-    kubeconfig: /etc/kubernetes/admin.conf
+    kubeconfig: "{{ kubeconfig }}"
     state: present
     definition:
       apiVersion: scheduling.k8s.io/v1
@@ -13,7 +13,7 @@
 
 - name: Install Ingress Nginx Controller chart
   kubernetes.core.helm:
-    kubeconfig: /etc/kubernetes/admin.conf
+    kubeconfig: "{{ kubeconfig }}"
     chart_ref: ingress-nginx
     chart_repo_url: https://kubernetes.github.io/ingress-nginx
     chart_version: "4.15.1"
@@ -60,9 +60,9 @@
           maxReplicas: "{{ ingress_autoscaling_max_replicas | default(3) }}"
 
 - name: Install Ingress Nginx Internal Controller chart
-  when: nginx_internal_ingress is defined
+  when: ingress_nginx_internal is defined
   kubernetes.core.helm:
-    kubeconfig: /etc/kubernetes/admin.conf
+    kubeconfig: "{{ kubeconfig }}"
     chart_ref: ingress-nginx
     chart_repo_url: https://kubernetes.github.io/ingress-nginx
     chart_version: "4.15.1"

@@ -84,7 +84,7 @@
         value_type: raw
 
 - name: Install Traefik Internal Ingress Controller chart
-  when: traefik_internal_ingress is defined
+  when: ingress_traefik_internal is defined
   kubernetes.core.helm:
     kubeconfig: "{{ kubeconfig }}"
     chart_ref: traefik

@@ -1,7 +1,7 @@
 ---
 - name: Create monitoring namespace
   kubernetes.core.k8s:
-    kubeconfig: /etc/kubernetes/admin.conf
+    kubeconfig: "{{ kubeconfig }}"
     name: monitoring
     api_version: v1
     kind: Namespace
@@ -9,7 +9,7 @@
 
 - name: Install Kube Prometheus Stack
   kubernetes.core.helm:
-    kubeconfig: /etc/kubernetes/admin.conf
+    kubeconfig: "{{ kubeconfig }}"
     chart_ref: kube-prometheus-stack
     chart_repo_url: https://prometheus-community.github.io/helm-charts
     chart_version: "81.6.9"
@@ -201,7 +201,7 @@
 
 - name: Install Loki
   kubernetes.core.helm:
-    kubeconfig: /etc/kubernetes/admin.conf
+    kubeconfig: "{{ kubeconfig }}"
     chart_ref: loki
     chart_repo_url: https://grafana.github.io/helm-charts
     chart_version: "6.52.0"
@@ -272,7 +272,7 @@
 
 - name: Install OpenTelemetry Collector - Logs
   kubernetes.core.helm:
-    kubeconfig: /etc/kubernetes/admin.conf
+    kubeconfig: "{{ kubeconfig }}"
     chart_ref: opentelemetry-collector
     chart_repo_url: https://open-telemetry.github.io/opentelemetry-helm-charts
     chart_version: "0.145.0"
@@ -435,7 +435,7 @@
 
 - name: Install OpenTelemetry Collector - Metrics
   kubernetes.core.helm:
-    kubeconfig: /etc/kubernetes/admin.conf
+    kubeconfig: "{{ kubeconfig }}"
     chart_ref: opentelemetry-collector
     chart_repo_url: https://open-telemetry.github.io/opentelemetry-helm-charts
     chart_version: "0.145.0"
@@ -559,7 +559,7 @@
 - name: Install Tempo
   when: tempo_enabled | default(false) | bool
   kubernetes.core.helm:
-    kubeconfig: /etc/kubernetes/admin.conf
+    kubeconfig: "{{ kubeconfig }}"
     chart_ref: tempo
     chart_repo_url: https://grafana.github.io/helm-charts
     chart_version: "1.26.2"
@@ -609,7 +609,7 @@
 - name: Install OpenTelemetry Collector - Traces
   when: tempo_enabled | default(false) | bool
   kubernetes.core.helm:
-    kubeconfig: /etc/kubernetes/admin.conf
+    kubeconfig: "{{ kubeconfig }}"
     chart_ref: opentelemetry-collector
     chart_repo_url: https://open-telemetry.github.io/opentelemetry-helm-charts
     chart_version: "0.145.0"
@@ -647,7 +647,7 @@
 - name: Install Pyroscope
   when: pyroscope_enabled | default(false) | bool
   kubernetes.core.helm:
-    kubeconfig: /etc/kubernetes/admin.conf
+    kubeconfig: "{{ kubeconfig }}"
     chart_ref: pyroscope
     chart_repo_url: https://grafana.github.io/helm-charts
     chart_version: "1.17.0"
@@ -669,7 +669,7 @@
 
 # - name: Install OpenTelemetry Operator
 #   kubernetes.core.helm:
-#     kubeconfig: /etc/kubernetes/admin.conf
+#     kubeconfig: "{{ kubeconfig }}"
 #     chart_ref: opentelemetry-operator
 #     chart_repo_url: https://open-telemetry.github.io/opentelemetry-helm-charts
 #     chart_version: "0.106.0"
@@ -694,7 +694,7 @@
 
 # - name: Create OTel default Instrumentation CR
 #   kubernetes.core.k8s:
-#     kubeconfig: /etc/kubernetes/admin.conf
+#     kubeconfig: "{{ kubeconfig }}"
 #     state: present
 #     definition:
 #       apiVersion: opentelemetry.io/v1alpha1

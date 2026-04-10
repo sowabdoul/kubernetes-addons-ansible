@@ -1,7 +1,7 @@
 ---
 - name: Install Rancher
   kubernetes.core.helm:
-    kubeconfig: /etc/kubernetes/admin.conf
+    kubeconfig: "{{ kubeconfig }}"
     chart_ref: rancher
     chart_repo_url: https://releases.rancher.com/server-charts/stable
     chart_version: "2.13.0"

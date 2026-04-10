@@ -1,7 +1,7 @@
 ---
 - name: Install Container Storage Interface for Openstack Cinder
   kubernetes.core.helm:
-    kubeconfig: /etc/kubernetes/admin.conf
+    kubeconfig: "{{ kubeconfig }}"
     chart_ref: openstack-cinder-csi
     chart_repo_url: https://kubernetes.github.io/cloud-provider-openstack/
     chart_version: "2.31.1"

@@ -13,6 +13,10 @@ kubernetes_worker2 ansible_host=
 kubernetes_worker3 ansible_host=
 
 [kubernetes:vars]
+kubeconfig={{ kubeconfig_path }}
+# kubeconfig_path=/etc/kubernetes/admin.conf
+kubeconfig_path=/etc/rancher/k3s/k3s.yaml
+
 # Longhorn variables
 longhorn_default_class_replica_count=1
 longhorn_default_data_locality=best-effort
@@ -34,7 +38,7 @@ openstack_application_credential_secret=your-credential-secret
 
 # Cert Manager Chart variables
 cert_manager_cluster_issuer_acme_server=https://acme-v02.api.letsencrypt.org/directory
-cert_manager_cluster_issuer_acme_email=postmaster@sample.net
+cert_manager_cluster_issuer_acme_email=postmaster@example.com
 
 # Ingress variables
 ingress_health_check_path=/healthz
@@ -68,4 +72,3 @@ velero_s3_bucket=velero
 velero_s3_endpoint=https://your-s3-endpoint
 velero_s3_access_key=your-access-key
 velero_s3_secret_key=your-secret-key
-
