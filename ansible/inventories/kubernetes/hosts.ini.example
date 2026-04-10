@@ -32,10 +32,15 @@ openstack_auth_url=https://your-openstack:5000
 openstack_application_credential_id=your-credential-id
 openstack_application_credential_secret=your-credential-secret
 
+# Cert Manager Chart variables
+cert_manager_cluster_issuer_acme_server=https://acme-v02.api.letsencrypt.org/directory
+cert_manager_cluster_issuer_acme_email=postmaster@sample.net
+
 # Ingress variables
 ingress_health_check_path=/healthz
 ingress_autoscaling_max_replicas=6
 ingress_nginx_load_balancer_ip=X.X.X.X
+#ingress_traefik_load_balancer_ip=X.X.X.X
 
 # Monitoring variables
 grafana_ui_enabled=true

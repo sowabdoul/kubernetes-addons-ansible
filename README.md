@@ -10,7 +10,9 @@ Each task installs and configures a specific addon via Helm, with variables expo
 | [longhorn.yml](ansible/tasks/longhorn.yml) | Distributed block storage with RWO and RWX StorageClasses |
 | [velero.yml](ansible/tasks/velero.yml) | Cluster backup and restore with S3 backend and CSI snapshot support |
 | [rancher.yml](ansible/tasks/rancher.yml) | Multi-cluster Kubernetes management UI |
-| [ingress.yml](ansible/tasks/ingress.yml) | Nginx ingress controller with autoscaling and load balancer support |
+| [ingress-nginx.yml](ansible/tasks/ingress-nginx.yml) | Nginx ingress controller with autoscaling and load balancer support |
+| [ingress-traefik.yml](ansible/tasks/ingress-traefik.yml) | Traefik ingress controller with autoscaling and load balancer support |
+| [kube-vip.yml](ansible/tasks/kube-vip.yml) | Kube-VIP load balancer with static IP support for Kubernetes services |
 | [openstack-cinder-csi.yml](ansible/tasks/openstack-cinder-csi.yml) | OpenStack Cinder CSI driver for persistent volumes |
 | [openstack-cloud-controller.yml](ansible/tasks/openstack-cloud-controller.yml) | OpenStack cloud controller manager integration |
 
@@ -49,6 +51,8 @@ ansible-playbook -i ansible/inventories/kubernetes/hosts.ini ansible/tasks/monit
 │   └── tasks
 │       ├── cert-manager.yml
 │       ├── ingress-nginx.yml
+│       ├── ingress-traefik.yml
+│       ├── kube-vip.yml
 │       ├── longhorn.yml
 │       ├── monitoring.yml
 │       ├── openstack-cinder-csi.yml

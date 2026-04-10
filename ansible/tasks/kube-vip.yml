@@ -1,0 +1,44 @@
+---
+- name: Configure kube-vip for loadBalancer functionality
+  when: kubernetes_kube_vip_enabled | default(false) | bool
+  block:
+    - name: Pull kube-vip image via containerd
+      ansible.builtin.command: >
+        ctr image pull ghcr.io/kube-vip/kube-vip:{{ kubernetes_kube_vip_version | default('v0.8.4') }}
+
+    - name: Create kube-vip DaemonSet manifest
+      ansible.builtin.shell: |
+        ctr run --rm --net-host \
+          ghcr.io/kube-vip/kube-vip:{{ kubernetes_kube_vip_version | default('v0.8.4') }} vip \
+          /kube-vip manifest daemonset {{ kubernetes_kube_vip_flags }} \
+          > /home/{{ ansible_user }}/kube-vip-daemonset.yaml
+
+    - name: Apply kube-vip RBAC manifest
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
+        src: https://kube-vip.io/manifests/rbac.yaml
+
+    - name: Apply kube-vip DaemonSet manifest
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
+        src: /home/{{ ansible_user }}/kube-vip-daemonset.yaml
+
+    - name: Install kube-vip Cloud Provider
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
+        src: https://raw.githubusercontent.com/kube-vip/kube-vip-cloud-provider/main/manifest/kube-vip-cloud-controller.yaml
+
+    - name: Apply kube-vip Cloud Provider configmap
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: kubevip
+            namespace: kube-system
+          data: "{{ kubernetes_kube_vip_cloud_provider_cidrs | default({'cidr-global': '0.0.0.0/32'}) }}"
